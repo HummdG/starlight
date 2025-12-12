@@ -245,6 +245,22 @@ The following items need to be completed:
   - Replace `-webkit-background-clip: text` with standard `background-clip: text` (or use both for compatibility)
   - Replace `-webkit-text-fill-color: transparent` with `color: transparent` where applicable
   - These warnings appear in the `.section-title` class around line 191-192
+- [ ] **Add Unit Tests**: Implement unit tests for:
+  - Browser agent functions
+  - Agent loop logic
+  - API route handlers
+  - Form parsing and validation
+- [ ] **Add Linting**: Set up ESLint with proper configuration for:
+  - TypeScript support
+  - React/Next.js rules
+  - Prettier integration for code formatting
+
+### DevOps
+- [ ] **Docker Image**: Create a Dockerfile and docker-compose setup for containerized deployment:
+  - Multi-stage build for optimized image size
+  - Include Playwright browser dependencies
+  - Environment variable configuration
+  - Health check endpoints
 
 ---
 
