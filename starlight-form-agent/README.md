@@ -230,11 +230,29 @@ npm run build
 npm start
 ```
 
+## ✅ TODO - Remaining Tasks
+
+The following items need to be completed:
+
+### High Priority
+- [ ] **Fix Core Form Filling Functionality**: The agent loop is implemented but needs to be connected to actually fill form fields in the legacy system. The browser agent has the form filling methods, but the integration with the frontend form data needs to be completed.
+
+### Bonus Tasks
+- [ ] **Multi-Form Support**: Extend the system to handle multiple form types beyond the Supervisory Home Visit form (as mentioned in the assessment bonus task).
+
+### Code Quality
+- [ ] **Remove CSS Warnings**: Fix vendor-prefixed CSS properties in `globals.css`:
+  - Replace `-webkit-background-clip: text` with standard `background-clip: text` (or use both for compatibility)
+  - Replace `-webkit-text-fill-color: transparent` with `color: transparent` where applicable
+  - These warnings appear in the `.section-title` class around line 191-192
+
+---
+
 ## 📄 License
 
 ISC
 
 ---
 
-Built with ❤️ for Starlight Assessment
+
 
