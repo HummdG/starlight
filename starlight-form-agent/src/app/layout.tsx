@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -32,15 +33,15 @@ export default function RootLayout({
                 </div>
               </div>
               <nav className="flex items-center gap-6">
-                <a href="/" className="text-sm text-white/60 hover:text-white transition-colors">
+                <Link href="/" className="text-sm text-white/60 hover:text-white transition-colors">
                   Dashboard
-                </a>
-                <a href="#forms" className="text-sm text-white/60 hover:text-white transition-colors">
+                </Link>
+                <Link href="#forms" className="text-sm text-white/60 hover:text-white transition-colors">
                   Forms
-                </a>
-                <a href="#history" className="text-sm text-white/60 hover:text-white transition-colors">
+                </Link>
+                <Link href="#history" className="text-sm text-white/60 hover:text-white transition-colors">
                   History
-                </a>
+                </Link>
               </nav>
             </div>
           </header>

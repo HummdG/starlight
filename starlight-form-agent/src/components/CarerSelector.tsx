@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Carer } from '@/types';
 
 interface CarerSelectorProps {
@@ -8,28 +8,24 @@ interface CarerSelectorProps {
   selectedCarer?: Carer;
 }
 
+// Mock carers data (in production, this would come from the API)
+const MOCK_CARERS: Carer[] = [
+  { id: '1', code: 'FCC-20', name: 'RAIHANA AKHTAR / AKHTAR-UL HUSSAIN', areaLocality: 'Croydon', status: 'Approved', approvalDate: '30/06/2025', userName: 'Raihana20' },
+  { id: '2', code: 'FCC-18', name: 'JOHN MARK', areaLocality: 'Covent Garden', status: 'Approved', approvalDate: '30/06/2025', userName: 'John18' },
+  { id: '3', code: 'FCC-12', name: 'SERENA ZEBS', areaLocality: 'West Corner London', status: 'Approved', approvalDate: '04/06/2025', userName: 'Mathew12' },
+  { id: '4', code: 'FCC-10', name: 'NANCY DWELLS', areaLocality: 'Northampton', status: 'Approved', approvalDate: '23/12/2023', userName: 'Nancy10' },
+  { id: '5', code: 'FCC-6', name: 'KELLY ROYLE', areaLocality: 'NORTH HARROW', status: 'Approved', approvalDate: '08/02/2023', userName: 'Kelly6' },
+  { id: '6', code: 'FCC-3', name: 'MARIA BOLT / STEPHEN BOLT', areaLocality: 'Meopham', status: 'Approved', approvalDate: '30/12/2022', userName: 'Maria3' },
+  { id: '7', code: 'FCC-2', name: 'NICOLA BILLINGTON', areaLocality: 'Chatham', status: 'Approved', approvalDate: '24/12/2022', userName: 'NICOLA2' },
+];
+
 export default function CarerSelector({ onCarerSelect, selectedCarer }: CarerSelectorProps) {
   const [carers, setCarers] = useState<Carer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Mock carers data (in production, this would come from the API)
-  const mockCarers: Carer[] = [
-    { id: '1', code: 'FCC-20', name: 'RAIHANA AKHTAR / AKHTAR-UL HUSSAIN', areaLocality: 'Croydon', status: 'Approved', approvalDate: '30/06/2025', userName: 'Raihana20' },
-    { id: '2', code: 'FCC-18', name: 'JOHN MARK', areaLocality: 'Covent Garden', status: 'Approved', approvalDate: '30/06/2025', userName: 'John18' },
-    { id: '3', code: 'FCC-12', name: 'SERENA ZEBS', areaLocality: 'West Corner London', status: 'Approved', approvalDate: '04/06/2025', userName: 'Mathew12' },
-    { id: '4', code: 'FCC-10', name: 'NANCY DWELLS', areaLocality: 'Northampton', status: 'Approved', approvalDate: '23/12/2023', userName: 'Nancy10' },
-    { id: '5', code: 'FCC-6', name: 'KELLY ROYLE', areaLocality: 'NORTH HARROW', status: 'Approved', approvalDate: '08/02/2023', userName: 'Kelly6' },
-    { id: '6', code: 'FCC-3', name: 'MARIA BOLT / STEPHEN BOLT', areaLocality: 'Meopham', status: 'Approved', approvalDate: '30/12/2022', userName: 'Maria3' },
-    { id: '7', code: 'FCC-2', name: 'NICOLA BILLINGTON', areaLocality: 'Chatham', status: 'Approved', approvalDate: '24/12/2022', userName: 'NICOLA2' },
-  ];
-
-  useEffect(() => {
-    loadCarers();
-  }, []);
-
-  const loadCarers = async () => {
+  const loadCarers = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -40,7 +36,7 @@ export default function CarerSelector({ onCarerSelect, selectedCarer }: CarerSel
       const contentType = response.headers.get('content-type');
       if (!response.ok || !contentType?.includes('application/json')) {
         console.warn('API returned non-JSON response, using mock data');
-        setCarers(mockCarers);
+        setCarers(MOCK_CARERS);
         return;
       }
       
@@ -69,21 +65,25 @@ export default function CarerSelector({ onCarerSelect, selectedCarer }: CarerSel
           setCarers(carersList);
         } else {
           console.warn('No carers found in response, using mock data');
-          setCarers(mockCarers);
+          setCarers(MOCK_CARERS);
         }
       } else {
         // Use mock data if API fails
         console.warn('API call unsuccessful, using mock data');
-        setCarers(mockCarers);
+        setCarers(MOCK_CARERS);
       }
     } catch (err) {
       console.error('Failed to load carers:', err);
       // Use mock data on error
-      setCarers(mockCarers);
+      setCarers(MOCK_CARERS);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadCarers();
+  }, [loadCarers]);
 
   const filteredCarers = carers.filter(carer =>
     carer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

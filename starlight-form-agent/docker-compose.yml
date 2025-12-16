@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORTAL_URL=${PORTAL_URL:-https://fostering.starlight.inc/starlightdemo/#/login/1}
+      - PORTAL_USERNAME=${PORTAL_USERNAME}
+      - PORTAL_PASSWORD=${PORTAL_PASSWORD}
+      - PORTAL_SECURITY_ANSWER=${PORTAL_SECURITY_ANSWER}
+    volumes:
+      # Mount for persistent data if needed
+      - app-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  app-data:
+

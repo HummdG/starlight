@@ -359,7 +359,7 @@ export async function extractCarers(): Promise<Carer[]> {
             
             // Try to parse the values from siblings
             // Expected order: Select, Code, Name, Area/Locality, Status, Approval Date, User Name
-            const selectIdx = siblings.findIndex(s => s === 'Select');
+            const _selectIdx = siblings.findIndex(s => s === 'Select');
             const codeIdx = siblings.findIndex(s => s.match(/^FCC-\d+$/));
             
             if (codeIdx !== -1 && siblings.length > codeIdx + 4) {
@@ -822,7 +822,7 @@ async function extractDropdownOptions(page: Page, labelText: string): Promise<Dr
         options.push({ value, label });
       }
     }
-  } catch (error) {
+  } catch (_error) {
     console.log(`Could not extract options for ${labelText}`);
   }
   
