@@ -72,6 +72,7 @@ starlight-form-agent/
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── agent/          # OpenAI agent loop API
+│   │   │   ├── agentic/        # Multi-agent workflow API (NEW!)
 │   │   │   ├── carers/         # Carer list API
 │   │   │   ├── form-structure/ # Form extraction API
 │   │   │   └── submit-form/    # Form submission API
@@ -84,8 +85,10 @@ starlight-form-agent/
 │   │   └── SubmissionHistory.tsx
 │   ├── lib/
 │   │   ├── agent-loop.ts       # Manual agent loop implementation
+│   │   ├── agentic-workflow.ts # Multi-agent orchestration (NEW!)
 │   │   └── browser-agent.ts    # Playwright browser automation
 │   └── types/
+│       ├── agents.ts           # Agent type definitions (NEW!)
 │       └── index.ts            # TypeScript type definitions
 ├── env.example                 # Environment variables template
 ├── package.json
@@ -95,7 +98,67 @@ starlight-form-agent/
 
 ## 🔧 Architecture
 
-### Manual Agent Loop
+### Agentic AI Workflow (New!)
+
+The multi-agent system (`src/lib/agentic-workflow.ts`) implements a sophisticated orchestration pattern for browser automation tasks:
+
+```
+┌─────────────────┐
+│   Orchestrator  │  ← Coordinates all agents
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│ Planner/Review/ │  ← Specialized agents  
+│    Research     │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│    Executor     │  ← Browser automation
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Agent Results  │  ← Success or Re-work
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Context Sync   │  ← State & Memory
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│ Compile Results │  ← Final output
+└─────────────────┘
+```
+
+#### Specialized Agents - What They Do & Why
+
+| Agent | What It Does | Why It's Needed |
+|-------|--------------|-----------------|
+| **Orchestrator** | The main controller that runs the workflow loop. It initializes all agents, passes tasks between them, handles retries, and compiles the final output. | Without a central coordinator, agents would have no way to communicate or know when to act. The orchestrator ensures tasks flow in the correct order. |
+| **Planner** | Takes a high-level goal (e.g., "fill out a form for carer FCC-18") and breaks it into small, sequential tasks (login → get carers → select carer → navigate → fill → submit). Uses GPT-4 to reason about the steps needed. | Complex goals require decomposition. The planner ensures we don't miss steps and handles dependencies between tasks (e.g., must login before selecting a carer). |
+| **Reviewer** | Validates both the plan and each task result. Can approve, reject with feedback, or suggest improvements. If a task fails review, it goes back for re-work. | Quality assurance prevents cascading failures. Catching a bad result early (e.g., wrong carer selected) avoids wasted effort on subsequent tasks. |
+| **Researcher** | Gathers relevant context before task execution. Looks up memory items (cached carers list, form data), checks current state (logged in? which page?), and reviews recent task history. | Agents need context to make good decisions. The researcher ensures the executor has all information needed without re-fetching data. |
+| **Executor** | Performs the actual browser automation actions using Playwright. Translates task descriptions into specific actions (click, fill, navigate) and updates the shared state with results. | This is the "hands" of the system - the only agent that actually interacts with the legacy portal through the browser. |
+
+#### How It Works
+
+1. **User sends a goal** → "Login and submit a home visit form for FCC-18"
+2. **Planner creates tasks** → Breaks into 5-6 atomic steps
+3. **Reviewer validates plan** → Checks for missing steps or wrong order
+4. **For each task:**
+   - Researcher gathers context (are we logged in? what page?)
+   - Executor performs the action (clicks, fills forms)
+   - Reviewer validates the result (did it work correctly?)
+   - If rejected → retry or re-plan
+5. **Context Sync** → State and memory updated after each task
+6. **Compile Results** → Final output with all completed tasks
+
+#### Key Features
+- **Shared Context & Memory** - Agents share state so they don't duplicate work
+- **Automatic Retry** - Failed tasks retry up to N times before giving up
+- **Review-Based QA** - Catches errors before they cascade
+- **Full History** - Every action logged for debugging and audit
+
+### Manual Agent Loop (Legacy)
 The agent loop (`src/lib/agent-loop.ts`) is implemented manually without using any agent SDKs (as per requirements). It:
 
 1. Maintains conversation context with the LLM
@@ -173,6 +236,43 @@ Runs the full agent loop with natural language commands.
   "sessionId": "optional_session_id"
 }
 ```
+
+### POST `/api/agentic` (New!)
+Runs the multi-agent workflow system with orchestrated planning and review.
+
+```json
+{
+  "goal": "Login to the system, select carer FCC-18, and fill out a home visit form",
+  "config": {
+    "maxIterations": 15,
+    "requireReview": true,
+    "autoRetry": true,
+    "retryLimit": 2,
+    "timeout": 300000
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "sessionId": "1234567890-abc123",
+  "goal": "Login to the system...",
+  "completedTasks": 4,
+  "totalTasks": 4,
+  "output": {
+    "state": { "isLoggedIn": true, "selectedCarer": "FCC-18" },
+    "results": [...],
+    "memory": {...}
+  },
+  "duration": 45000,
+  "history": [...]
+}
+```
+
+### GET `/api/agentic`
+Returns API documentation and available agents.
 
 ## 🎨 Design Decisions
 

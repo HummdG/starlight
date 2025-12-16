@@ -1,3 +1,6 @@
+// Re-export agent types
+export * from './agents';
+
 // Form field types
 export type FieldType = 
   | 'text' 

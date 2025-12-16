@@ -65,6 +65,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/agentic/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/agentic">> = Specific
+  const handler = {} as typeof import("../../src/app/api/agentic/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/carers/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/carers">> = Specific
