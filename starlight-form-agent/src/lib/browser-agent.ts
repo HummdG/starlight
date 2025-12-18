@@ -61,8 +61,25 @@ export async function getBrowser(): Promise<Browser> {
     console.log('Launching new browser...');
     browserInstance = await chromium.launch({
       headless: false, // Set to true for production, false to see the browser
-      slowMo: 500, // Slow down actions by 500ms so you can see what's happening
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      slowMo: 300, // Reduced slowMo for better stability
+      timeout: 60000, // Increase launch timeout to 60 seconds
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Overcome limited resource problems
+        '--disable-gpu', // Disable GPU hardware acceleration
+        '--disable-extensions', // Disable extensions
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-features=TranslateUI',
+        '--disable-ipc-flooding-protection',
+        '--disable-renderer-backgrounding',
+        '--enable-features=NetworkService,NetworkServiceInProcess',
+        '--force-color-profile=srgb',
+      ],
     });
     
     // Handle browser disconnect event
@@ -93,8 +110,32 @@ export async function getPage(): Promise<Page> {
     console.log('Creating new browser context and page...');
     contextInstance = await browser.newContext({
       viewport: { width: 1280, height: 720 },
+      ignoreHTTPSErrors: true,
     });
+    
     pageInstance = await contextInstance.newPage();
+    
+    // Set default navigation timeout
+    pageInstance.setDefaultNavigationTimeout(60000);
+    pageInstance.setDefaultTimeout(30000);
+    
+    // Add console logging from the page for debugging
+    pageInstance.on('console', msg => {
+      if (msg.type() === 'error') {
+        console.log('Page console error:', msg.text());
+      }
+    });
+    
+    // Log page crashes
+    pageInstance.on('crash', () => {
+      console.error('Page crashed!');
+    });
+    
+    // Log unexpected page closures
+    pageInstance.on('close', () => {
+      console.log('Page was closed');
+      pageInstance = null;
+    });
   }
   return pageInstance;
 }
@@ -458,29 +499,85 @@ export async function selectCarer(carerCode: string): Promise<boolean> {
   const page = await getPage();
   
   try {
-    // Find the row with the carer code and click Select
-    const selectButton = await page.locator(`tr:has-text("${carerCode}") button:has-text("Select")`);
-    if (await selectButton.isVisible()) {
-      await selectButton.click();
-      await page.waitForTimeout(1000);
+    console.log(`Looking for row with carer code: ${carerCode}`);
+    
+    // Method 1: Try to find by row with carer code
+    let selectButton = page.locator(`tr:has-text("${carerCode}") button:has-text("Select")`).first();
+    
+    // Method 2: If not found, try alternative locators
+    if (!await selectButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('Method 1 failed, trying alternative locators...');
+      selectButton = page.locator(`[role="row"]:has-text("${carerCode}") button:has-text("Select")`).first();
+    }
+    
+    // Method 3: Try finding by text content
+    if (!await selectButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('Method 2 failed, trying text content approach...');
+      // Find the cell with the carer code, then navigate to the row's select button
+      const carerCell = page.locator(`td:has-text("${carerCode}"), [role="cell"]:has-text("${carerCode}")`).first();
+      if (await carerCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const row = carerCell.locator('xpath=ancestor::tr[1]');
+        selectButton = row.locator('button:has-text("Select")').first();
+      }
+    }
+    
+    if (await selectButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log('Select button found, clicking...');
+      
+      // Click and wait for either navigation or network idle
+      // This is crucial - the select button likely triggers navigation
+      await Promise.all([
+        // Wait for navigation or a significant network change
+        page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
+          console.log('Network idle timeout, continuing...');
+        }),
+        selectButton.click(),
+      ]).catch(async (error) => {
+        console.log('Click with navigation wait failed, trying simple click:', error);
+        // Fallback to simple click
+        await selectButton.click();
+      });
+      
+      // Give the page time to stabilize after navigation
+      await page.waitForTimeout(2000);
+      
+      // Verify we're on a new page (carer profile)
+      const currentUrl = page.url();
+      console.log('After selection, current URL:', currentUrl);
+      
       return true;
     }
+    
+    console.error(`Could not find Select button for carer ${carerCode}`);
     return false;
   } catch (error) {
     console.error('Failed to select carer:', error);
+    // Check if browser is still connected
+    if (!isBrowserConnected()) {
+      console.error('Browser disconnected during carer selection');
+    }
     return false;
   }
 }
 
 // Navigate to Supervisory Home Visit form
 export async function navigateToSupervisoryHomeVisitForm(): Promise<boolean> {
+  // Check if browser is still connected before proceeding
+  if (!isBrowserConnected()) {
+    console.error('Browser is not connected, cannot navigate to form');
+    return false;
+  }
+  
   const page = await getPage();
   
   try {
     console.log('Navigating to Supervisory Home Visit form...');
     console.log('Current URL:', page.url());
     
-    // Wait for the carer profile page to be ready
+    // Wait for the carer profile page to be ready and stable
+    await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {
+      console.log('DOM content loaded timeout, continuing...');
+    });
     await page.waitForTimeout(2000);
     
     // Try multiple approaches to find the Supervisory Home Visit link
@@ -1031,6 +1128,12 @@ async function fillTextareaByLabel(page: Page, labelText: string, value: string)
 
 // Fill the form with provided data
 export async function fillForm(formData: Record<string, string | boolean>): Promise<boolean> {
+  // Check if browser is still connected before proceeding
+  if (!isBrowserConnected()) {
+    console.error('Browser is not connected, cannot fill form');
+    return false;
+  }
+  
   const page = await getPage();
   
   try {
@@ -1169,29 +1272,119 @@ export async function submitForm(submitType: 'draft' | 'submit' | 'submitAndLock
   
   try {
     let buttonName: string;
+    let alternativeNames: string[];
+    
     switch (submitType) {
       case 'submit':
         buttonName = 'Submit';
+        alternativeNames = ['Submit', 'Save'];
         break;
       case 'submitAndLock':
         buttonName = 'Submit & Lock';
+        alternativeNames = ['Submit & Lock', 'Submit and Lock', 'Lock'];
         break;
       default:
         buttonName = 'Save as Draft';
+        alternativeNames = ['Save as Draft', 'Save Draft', 'Draft', 'Save'];
     }
     
-    await page.getByRole('button', { name: buttonName }).click();
-    await page.waitForTimeout(3000);
+    console.log(`Looking for button: ${buttonName}`);
+    
+    // Try multiple ways to find the button
+    let submitButton = null;
+    
+    // Method 1: By role and exact name
+    submitButton = page.getByRole('button', { name: buttonName });
+    if (!await submitButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('Method 1 failed, trying alternatives...');
+      
+      // Method 2: Try alternative button names
+      for (const altName of alternativeNames) {
+        submitButton = page.getByRole('button', { name: new RegExp(altName, 'i') });
+        if (await submitButton.first().isVisible({ timeout: 1000 }).catch(() => false)) {
+          console.log(`Found button with alternative name: ${altName}`);
+          break;
+        }
+      }
+    }
+    
+    // Method 3: By button text content
+    if (!await submitButton?.first().isVisible({ timeout: 1000 }).catch(() => false)) {
+      console.log('Trying to find button by text content...');
+      submitButton = page.locator('button').filter({ hasText: new RegExp(buttonName, 'i') }).first();
+    }
+    
+    // Method 4: PrimeNG button
+    if (!await submitButton?.isVisible({ timeout: 1000 }).catch(() => false)) {
+      console.log('Trying to find PrimeNG button...');
+      submitButton = page.locator('.p-button, p-button').filter({ hasText: new RegExp(buttonName, 'i') }).first();
+    }
+    
+    if (!await submitButton?.isVisible({ timeout: 2000 }).catch(() => false)) {
+      // Log available buttons for debugging
+      const buttons = await page.locator('button').allTextContents();
+      console.log('Available buttons:', buttons);
+      return {
+        success: false,
+        message: `Could not find "${buttonName}" button. Available buttons: ${buttons.join(', ')}`,
+      };
+    }
+    
+    console.log('Button found, clicking...');
+    
+    // Click and wait for response
+    await Promise.all([
+      page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
+        console.log('Network idle timeout after submit, continuing...');
+      }),
+      submitButton.click(),
+    ]);
+    
+    await page.waitForTimeout(2000);
     
     // Check for success message
-    const successMessage = await page.getByText(/saved|submitted|success/i).isVisible().catch(() => false);
+    const successIndicators = [
+      /saved successfully/i,
+      /submitted successfully/i,
+      /form submitted/i,
+      /success/i,
+      /completed/i,
+    ];
     
+    let successMessage = false;
+    for (const indicator of successIndicators) {
+      if (await page.getByText(indicator).isVisible({ timeout: 1000 }).catch(() => false)) {
+        successMessage = true;
+        break;
+      }
+    }
+    
+    // Check for error messages
+    const errorMessage = await page.locator('.p-toast-message-error, .error, .alert-error, [class*="error"]')
+      .first().textContent().catch(() => null);
+    
+    if (errorMessage) {
+      console.log('Error message found:', errorMessage);
+      return {
+        success: false,
+        message: `Form submission error: ${errorMessage}`,
+      };
+    }
+    
+    console.log('Form submission completed');
     return {
       success: true,
       message: successMessage ? 'Form submitted successfully' : 'Form submission completed',
     };
   } catch (error) {
     console.error('Failed to submit form:', error);
+    // Check if browser is still connected
+    if (!isBrowserConnected()) {
+      return {
+        success: false,
+        message: 'Browser disconnected during form submission. Please try again.',
+      };
+    }
     return {
       success: false,
       message: `Failed to submit form: ${error instanceof Error ? error.message : 'Unknown error'}`,

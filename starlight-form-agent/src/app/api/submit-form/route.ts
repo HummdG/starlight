@@ -64,18 +64,34 @@ export async function POST(request: NextRequest) {
     }
     console.log(`Browser: Found ${carers.length} carers`);
 
-    // Step 3: Select the specified carer
+    // Step 3: Select the specified carer (with retry logic)
     console.log(`Browser: Selecting carer ${carerCode}...`);
-    const selectSuccess = await selectCarer(carerCode);
+    let selectSuccess = false;
+    let selectRetries = 0;
+    const maxSelectRetries = 2;
+    
+    while (!selectSuccess && selectRetries < maxSelectRetries) {
+      try {
+        selectSuccess = await selectCarer(carerCode);
+        if (!selectSuccess && selectRetries < maxSelectRetries - 1) {
+          console.log(`Carer selection failed, retrying (attempt ${selectRetries + 2}/${maxSelectRetries})...`);
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (selectError) {
+        console.error(`Carer selection error on attempt ${selectRetries + 1}:`, selectError);
+      }
+      selectRetries++;
+    }
     
     if (!selectSuccess) {
       await closeBrowser();
       return NextResponse.json(
-        { success: false, error: `Failed to select carer ${carerCode}` },
+        { success: false, error: `Failed to select carer ${carerCode} after ${maxSelectRetries} attempts` },
         { status: 500 }
       );
     }
-    console.log('Browser: Carer selected');
+    console.log('Browser: Carer selected successfully');
 
     // Step 4: Navigate to the Supervisory Home Visit form
     console.log('Browser: Navigating to Supervisory Home Visit form...');
